@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../services/session_service.dart';
+import 'register_page.dart';
 import 'root_page.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  final String? initialUsername;
+
+  const LoginPage({super.key, this.initialUsername});
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -12,7 +15,6 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController usernameController = TextEditingController();
-
   final TextEditingController passwordController = TextEditingController();
 
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
@@ -20,7 +22,16 @@ class _LoginPageState extends State<LoginPage> {
   bool obscurePassword = true;
   bool isLoading = false;
 
+  // Password login wajib sesuai NIM pemilik aplikasi.
   static const String correctPassword = '124240113';
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Mengisi username otomatis jika berasal dari halaman Register.
+    usernameController.text = widget.initialUsername ?? '';
+  }
 
   @override
   void dispose() {
@@ -29,6 +40,7 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  // Proses login dan penyimpanan session.
   Future<void> handleLogin() async {
     if (!formKey.currentState!.validate()) {
       return;
@@ -52,6 +64,7 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
+      // Menyimpan status login dan username ke SharedPreferences.
       await SessionService.login(username);
 
       if (!mounted) return;
@@ -74,6 +87,14 @@ class _LoginPageState extends State<LoginPage> {
         isLoading = false;
       });
     }
+  }
+
+  // Membuka halaman Register.
+  void openRegisterPage() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const RegisterPage()),
+    );
   }
 
   @override
@@ -144,6 +165,7 @@ class _LoginPageState extends State<LoginPage> {
                       if (value == null || value.trim().isEmpty) {
                         return 'Username tidak boleh kosong';
                       }
+
                       return null;
                     },
                   ),
@@ -164,7 +186,7 @@ class _LoginPageState extends State<LoginPage> {
                     controller: passwordController,
                     obscureText: obscurePassword,
                     decoration: InputDecoration(
-                      hintText: 'Masukkan password',
+                      hintText: 'Masukkan password (NIM)',
                       prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
                         icon: Icon(
@@ -189,6 +211,7 @@ class _LoginPageState extends State<LoginPage> {
                       if (value == null || value.isEmpty) {
                         return 'Password tidak boleh kosong';
                       }
+
                       return null;
                     },
                   ),
@@ -218,7 +241,29 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 18),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Belum punya akun?',
+                        style: TextStyle(color: Color(0xFF8D6460)),
+                      ),
+                      TextButton(
+                        onPressed: openRegisterPage,
+                        child: const Text(
+                          'Register',
+                          style: TextStyle(
+                            color: Color(0xFFE5738A),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 10),
 
                   const Text(
                     'Pinkie Party Mart',
