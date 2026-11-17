@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import '../services/cart_service.dart';
 import '../services/session_service.dart';
 import '../widgets/product_card.dart';
+import 'wishlist_page.dart';
 
 class HomePage extends StatefulWidget {
   final ValueChanged<Product> onProductTap;
@@ -46,7 +47,7 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  // ambil data produk dari API
+  // Mengambil data produk dari API.
   Future<void> fetchProducts() async {
     setState(() {
       isLoading = true;
@@ -58,7 +59,6 @@ class _HomePageState extends State<HomePage> {
 
       if (!mounted) return;
 
-      // kategori diambil otomatis dari data API
       final categoryList =
           result.map((product) => product.category).toSet().toList()..sort();
 
@@ -77,7 +77,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // filter kategori dan pencarian digabung
+  // Filter kategori dan pencarian.
   List<Product> get filteredProducts {
     return products.where((product) {
       final matchesSearch = product.title.toLowerCase().contains(
@@ -91,27 +91,31 @@ class _HomePageState extends State<HomePage> {
     }).toList();
   }
 
+  // Membuka halaman Wishlist.
+  void openWishlist() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const WishlistPage()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFFE5DE),
-
       body: SafeArea(
         child: Column(
           children: [
-            // header dan search bar
             buildHeader(),
 
-            // chip kategori
             if (!isLoading && errorMessage == null) buildCategoryList(),
 
-            // list produk
             Expanded(child: buildProductContent()),
           ],
         ),
       ),
 
-      // keranjang dengan badge dari Hive
+      // Keranjang dengan badge dari Hive.
       floatingActionButton: FloatingActionButton.extended(
         onPressed: widget.onCartTap,
         backgroundColor: const Color(0xFFE5738A),
@@ -126,7 +130,6 @@ class _HomePageState extends State<HomePage> {
               clipBehavior: Clip.none,
               children: [
                 const Icon(Icons.shopping_cart_rounded),
-
                 if (count > 0)
                   Positioned(
                     right: -10,
@@ -164,7 +167,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // header sapa pengguna dan search bar
+  // Header pengguna, tombol Wishlist, dan pencarian.
   Widget buildHeader() {
     return Container(
       width: double.infinity,
@@ -183,13 +186,29 @@ class _HomePageState extends State<HomePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Hai, ${SessionService.currentUser}! 🎈',
-            style: const TextStyle(
-              fontSize: 23,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF4A2C2A),
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Hai, ${SessionService.currentUser}! 🎈',
+                  style: const TextStyle(
+                    fontSize: 23,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF4A2C2A),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Wishlist Favorit',
+                onPressed: openWishlist,
+                icon: const Icon(
+                  Icons.favorite_rounded,
+                  color: Color(0xFFE5738A),
+                  size: 29,
+                ),
+                style: IconButton.styleFrom(backgroundColor: Colors.white),
+              ),
+            ],
           ),
 
           const SizedBox(height: 5),
@@ -201,7 +220,6 @@ class _HomePageState extends State<HomePage> {
 
           const SizedBox(height: 18),
 
-          // search bar
           TextField(
             controller: searchController,
             onChanged: (value) {
@@ -253,7 +271,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // daftar kategori
+  // Daftar kategori dari API.
   Widget buildCategoryList() {
     return SizedBox(
       height: 62,
@@ -300,7 +318,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // konten utama
+  // Konten produk.
   Widget buildProductContent() {
     if (isLoading) {
       return const Center(
@@ -333,9 +351,7 @@ class _HomePageState extends State<HomePage> {
                 size: 65,
                 color: Color(0xFFE5738A),
               ),
-
               const SizedBox(height: 15),
-
               const Text(
                 'Yah, pestanya gagal dimuat 😢',
                 textAlign: TextAlign.center,
@@ -345,9 +361,7 @@ class _HomePageState extends State<HomePage> {
                   color: Color(0xFF4A2C2A),
                 ),
               ),
-
               const SizedBox(height: 8),
-
               Text(
                 errorMessage!,
                 textAlign: TextAlign.center,
@@ -355,9 +369,7 @@ class _HomePageState extends State<HomePage> {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 11, color: Color(0xFF8D6460)),
               ),
-
               const SizedBox(height: 18),
-
               ElevatedButton.icon(
                 onPressed: fetchProducts,
                 icon: const Icon(Icons.refresh_rounded),

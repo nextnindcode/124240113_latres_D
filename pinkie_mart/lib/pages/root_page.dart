@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-import '../controllers/root_navigation_controller.dart';
+import '../controller/root_navigation_controller.dart';
 import '../models/product.dart';
 import '../services/session_service.dart';
 import '../theme/app_theme.dart';

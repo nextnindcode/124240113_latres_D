@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
+import '../controller/wishlist_controller.dart';
 import '../models/product.dart';
 
 class ProductCard extends StatelessWidget {
@@ -8,8 +10,38 @@ class ProductCard extends StatelessWidget {
 
   const ProductCard({super.key, required this.product, required this.onTap});
 
+  Future<void> _toggleFavorite(WishlistController controller) async {
+    try {
+      final added = await controller.toggleWishlist(product);
+
+      Get.snackbar(
+        added ? 'Wishlist ditambahkan 💗' : 'Wishlist dihapus',
+        added
+            ? '${product.title} berhasil ditambahkan ke favorit.'
+            : '${product.title} dihapus dari favorit.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: added
+            ? const Color(0xFF6AB0AF)
+            : const Color(0xFFD9534F),
+        colorText: Colors.white,
+        margin: const EdgeInsets.all(12),
+        duration: const Duration(seconds: 2),
+      );
+    } catch (e) {
+      Get.snackbar(
+        'Gagal',
+        'Wishlist tidak dapat diperbarui.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFD9534F),
+        colorText: Colors.white,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final wishlistController = Get.find<WishlistController>();
+
     return GestureDetector(
       onTap: onTap,
       child: Card(
@@ -21,39 +53,79 @@ class ProductCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // gambar produk
             Expanded(
               flex: 6,
-              child: Container(
-                width: double.infinity,
-                color: const Color(0xFFFBC9C0),
-                child: Image.network(
-                  product.thumbnail,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const Center(
-                      child: Icon(
-                        Icons.image_not_supported_rounded,
-                        size: 45,
-                        color: Color(0xFFE5738A),
-                      ),
-                    );
-                  },
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
+              child: Stack(
+                children: [
+                  Container(
+                    width: double.infinity,
+                    height: double.infinity,
+                    color: const Color(0xFFFBC9C0),
+                    child: Image.network(
+                      product.thumbnail,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Center(
+                          child: Icon(
+                            Icons.image_not_supported_rounded,
+                            size: 45,
+                            color: Color(0xFFE5738A),
+                          ),
+                        );
+                      },
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
 
-                    return const Center(
-                      child: CircularProgressIndicator(
-                        color: Color(0xFFE5738A),
-                        strokeWidth: 2,
-                      ),
-                    );
-                  },
-                ),
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFFE5738A),
+                            strokeWidth: 2,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+
+                  // Tombol Wishlist.
+                  Positioned(
+                    top: 7,
+                    right: 7,
+                    child: Material(
+                      color: Colors.white,
+                      shape: const CircleBorder(),
+                      elevation: 2,
+                      child: Obx(() {
+                        final isFavorite = wishlistController.isFavorite(
+                          product.id,
+                        );
+
+                        return IconButton(
+                          constraints: const BoxConstraints(
+                            minWidth: 38,
+                            minHeight: 38,
+                          ),
+                          padding: EdgeInsets.zero,
+                          iconSize: 21,
+                          tooltip: isFavorite
+                              ? 'Hapus dari Wishlist'
+                              : 'Tambah ke Wishlist',
+                          onPressed: () {
+                            _toggleFavorite(wishlistController);
+                          },
+                          icon: Icon(
+                            isFavorite
+                                ? Icons.favorite_rounded
+                                : Icons.favorite_border_rounded,
+                            color: const Color(0xFFE5738A),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                ],
               ),
             ),
 
-            // informasi produk
             Expanded(
               flex: 5,
               child: Padding(
@@ -72,7 +144,6 @@ class ProductCard extends StatelessWidget {
                         color: Color(0xFF4A2C2A),
                       ),
                     ),
-
                     Text(
                       '\$${product.price.toStringAsFixed(2)}',
                       style: const TextStyle(
@@ -81,8 +152,6 @@ class ProductCard extends StatelessWidget {
                         color: Color(0xFFE5738A),
                       ),
                     ),
-
-                    // rating produk
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 7,
