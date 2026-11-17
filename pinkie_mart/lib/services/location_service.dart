@@ -1,42 +1,46 @@
 import 'package:geolocator/geolocator.dart';
 
 class LocationService {
-  // ammbil lokasi pengguna setelah memastikan GPS dan izin tersedia
+  // Mengambil lokasi terkini pengguna.
   static Future<Position> getCurrentPosition() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    // cek apakah GPS perangkat aktif
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
 
     if (!serviceEnabled) {
-      throw Exception('Layanan lokasi belum aktif. Silakan nyalakan GPS.');
+      throw Exception('Layanan lokasi belum aktif. Silakan aktifkan GPS.');
     }
 
-    // cek izin lokasi
-    permission = await Geolocator.checkPermission();
+    LocationPermission permission = await Geolocator.checkPermission();
 
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
+    }
 
-      if (permission == LocationPermission.denied) {
-        throw Exception('Izin lokasi ditolak.');
-      }
+    if (permission == LocationPermission.denied) {
+      throw Exception('Izin lokasi ditolak.');
     }
 
     if (permission == LocationPermission.deniedForever) {
       throw Exception(
-        'Izin lokasi ditolak permanen. Aktifkan melalui pengaturan aplikasi.',
+        'Izin lokasi ditolak permanen. '
+        'Aktifkan izin lokasi melalui pengaturan perangkat.',
       );
     }
 
-    // ambil posisi sekarang
-    return await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
-    );
+    try {
+      return await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 20),
+        ),
+      );
+    } catch (e) {
+      throw Exception(
+        'Gagal mendapatkan lokasi. Periksa GPS dan koneksi internet.',
+      );
+    }
   }
 
-  // hitung jarak posisi pengguna ke koordinat outlet dalam meter
+  // Menghitung jarak pengguna ke outlet dalam meter.
   static double calculateDistance(
     Position userPosition,
     double outletLatitude,
