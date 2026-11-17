@@ -21,25 +21,27 @@ class RootPage extends StatefulWidget {
 
 class _RootPageState extends State<RootPage> {
   late final RootNavigationController navigationController;
-
-  // Halaman dibuat sekali supaya Home tidak fetch API berulang.
   late final List<Widget> pages;
 
   @override
   void initState() {
     super.initState();
 
-    // Mendaftarkan controller ke GetX.
+    // GetX hanya mengelola indeks dua tab utama: Home dan Profile.
     navigationController = Get.put(RootNavigationController());
 
+    // Nearby sengaja tidak dimasukkan ke bottom navigation agar sesuai soal SI-D.
     pages = [
-      HomePage(onProductTap: handleProductTap, onCartTap: handleCartTap),
-      const NearbyPage(),
+      HomePage(
+        onProductTap: handleProductTap,
+        onCartTap: handleCartTap,
+        onNearbyTap: handleNearbyTap,
+      ),
       ProfilePage(onLogout: logout),
     ];
   }
 
-  // Membuka halaman detail produk.
+  // Navigasi ke detail produk yang dipilih dari Home.
   void handleProductTap(Product product) {
     Navigator.push(
       context,
@@ -47,7 +49,7 @@ class _RootPageState extends State<RootPage> {
     );
   }
 
-  // Membuka halaman keranjang.
+  // Cart adalah halaman terpisah yang dibuka melalui tombol di Home.
   void handleCartTap() {
     Navigator.push(
       context,
@@ -55,7 +57,15 @@ class _RootPageState extends State<RootPage> {
     );
   }
 
-  // Logout hanya menghapus session, bukan data Hive.
+  // Nearby/LBS tetap tersedia sebagai fitur tambahan, bukan tab utama.
+  void handleNearbyTap() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const NearbyPage()),
+    );
+  }
+
+  // Logout menghapus session. Data Hive tetap tersimpan sesuai username.
   Future<void> logout() async {
     await SessionService.logout();
 
@@ -70,11 +80,9 @@ class _RootPageState extends State<RootPage> {
 
   @override
   void dispose() {
-    // Menghapus controller ketika RootPage tidak digunakan.
     if (Get.isRegistered<RootNavigationController>()) {
       Get.delete<RootNavigationController>();
     }
-
     super.dispose();
   }
 
@@ -85,6 +93,7 @@ class _RootPageState extends State<RootPage> {
 
       return Scaffold(
         body: IndexedStack(index: selectedIndex, children: pages),
+        // PENTING UNTUK RESPONSI SI-D: tepat dua menu bottom navigation.
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: selectedIndex,
           onTap: navigationController.changeTab,
@@ -97,10 +106,6 @@ class _RootPageState extends State<RootPage> {
             BottomNavigationBarItem(
               icon: Icon(Icons.home_rounded),
               label: 'Home',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.location_on_rounded),
-              label: 'Nearby',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.person_rounded),
