@@ -31,6 +31,7 @@ class _HomePageState extends State<HomePage> {
 
   String selectedCategory = 'Semua';
   String searchQuery = '';
+  String selectedSort = 'default';
 
   bool isLoading = true;
   String? errorMessage;
@@ -77,18 +78,58 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // Filter kategori dan pencarian.
+  // Memeriksa apakah filter sedang digunakan.
+  bool get hasActiveFilter {
+    return searchQuery.isNotEmpty ||
+        selectedCategory != 'Semua' ||
+        selectedSort != 'default';
+  }
+
+  // Pencarian, filter kategori, dan sorting produk.
   List<Product> get filteredProducts {
-    return products.where((product) {
-      final matchesSearch = product.title.toLowerCase().contains(
-        searchQuery.toLowerCase(),
-      );
+    final query = searchQuery.trim().toLowerCase();
+
+    final result = products.where((product) {
+      final matchesSearch =
+          product.title.toLowerCase().contains(query) ||
+          product.brand.toLowerCase().contains(query) ||
+          product.description.toLowerCase().contains(query);
 
       final matchesCategory =
           selectedCategory == 'Semua' || product.category == selectedCategory;
 
       return matchesSearch && matchesCategory;
     }).toList();
+
+    switch (selectedSort) {
+      case 'priceAsc':
+        result.sort((a, b) => a.price.compareTo(b.price));
+        break;
+
+      case 'priceDesc':
+        result.sort((a, b) => b.price.compareTo(a.price));
+        break;
+
+      case 'ratingDesc':
+        result.sort((a, b) => b.rating.compareTo(a.rating));
+        break;
+
+      default:
+        break;
+    }
+
+    return result;
+  }
+
+  // Menghapus semua filter.
+  void resetFilters() {
+    searchController.clear();
+
+    setState(() {
+      searchQuery = '';
+      selectedCategory = 'Semua';
+      selectedSort = 'default';
+    });
   }
 
   // Membuka halaman Wishlist.
@@ -108,7 +149,10 @@ class _HomePageState extends State<HomePage> {
           children: [
             buildHeader(),
 
-            if (!isLoading && errorMessage == null) buildCategoryList(),
+            if (!isLoading && errorMessage == null) ...[
+              buildCategoryList(),
+              buildFilterToolbar(),
+            ],
 
             Expanded(child: buildProductContent()),
           ],
@@ -121,7 +165,7 @@ class _HomePageState extends State<HomePage> {
         backgroundColor: const Color(0xFFE5738A),
         foregroundColor: Colors.white,
         elevation: 4,
-        icon: ValueListenableBuilder(
+        icon: ValueListenableBuilder<Box<CartItem>>(
           valueListenable: Hive.box<CartItem>('cart').listenable(),
           builder: (context, box, child) {
             final count = CartService.countOf(SessionService.currentUser);
@@ -228,8 +272,11 @@ class _HomePageState extends State<HomePage> {
               });
             },
             decoration: InputDecoration(
-              hintText: 'Cari produk pesta...',
-              hintStyle: const TextStyle(color: Color(0xFF9B8580)),
+              hintText: 'Cari nama, brand, atau produk...',
+              hintStyle: const TextStyle(
+                color: Color(0xFF9B8580),
+                fontSize: 13,
+              ),
               prefixIcon: const Icon(
                 Icons.search_rounded,
                 color: Color(0xFFE5738A),
@@ -318,6 +365,81 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  // Toolbar sorting dan reset filter.
+  Widget buildFilterToolbar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '${filteredProducts.length} produk ditemukan',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF6D514D),
+              ),
+            ),
+          ),
+
+          if (hasActiveFilter)
+            TextButton.icon(
+              onPressed: resetFilters,
+              icon: const Icon(Icons.restart_alt_rounded, size: 17),
+              label: const Text('Reset'),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFE5738A),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+
+          const SizedBox(width: 4),
+
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFFBC9C0)),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: selectedSort,
+                icon: const Icon(Icons.sort_rounded, color: Color(0xFFE5738A)),
+                style: const TextStyle(color: Color(0xFF4A2C2A), fontSize: 11),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'default',
+                    child: Text('Urutan awal'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'priceAsc',
+                    child: Text('Harga terendah'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'priceDesc',
+                    child: Text('Harga tertinggi'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'ratingDesc',
+                    child: Text('Rating tertinggi'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+
+                  setState(() {
+                    selectedSort = value;
+                  });
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // Konten produk.
   Widget buildProductContent() {
     if (isLoading) {
@@ -388,20 +510,42 @@ class _HomePageState extends State<HomePage> {
     final filtered = filteredProducts;
 
     if (filtered.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.search_off_rounded, size: 65, color: Color(0xFFE5738A)),
-            SizedBox(height: 12),
-            Text(
-              'Produknya belum ada nih 🥺',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF4A2C2A),
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.search_off_rounded,
+                size: 65,
+                color: Color(0xFFE5738A),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              const Text(
+                'Produknya belum ada nih 🥺',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF4A2C2A),
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Coba kata kunci atau kategori lainnya.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: Color(0xFF8D6460)),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: resetFilters,
+                icon: const Icon(Icons.restart_alt_rounded),
+                label: const Text('Reset pencarian'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFE5738A),
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
