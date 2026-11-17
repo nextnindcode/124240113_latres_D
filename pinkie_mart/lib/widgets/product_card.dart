@@ -21,7 +21,7 @@ class ProductCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Gambar produk.
+            // gambar produk
             Expanded(
               flex: 6,
               child: Container(
@@ -53,7 +53,7 @@ class ProductCard extends StatelessWidget {
               ),
             ),
 
-            // Informasi produk.
+            // informasi produk
             Expanded(
               flex: 5,
               child: Padding(
@@ -82,7 +82,7 @@ class ProductCard extends StatelessWidget {
                       ),
                     ),
 
-                    // Rating produk.
+                    // rating produk
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 7,

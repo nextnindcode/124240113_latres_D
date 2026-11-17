@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../models/product.dart';
-import '../services/session_service.dart';
+import 'cart_page.dart';
+import 'detail_page.dart';
 import 'home_page.dart';
 import 'login_page.dart';
+
+import '../services/session_service.dart';
 
 class RootPage extends StatefulWidget {
   const RootPage({super.key});
@@ -15,7 +18,7 @@ class RootPage extends StatefulWidget {
 class _RootPageState extends State<RootPage> {
   int selectedIndex = 0;
 
-  // [PENTING] Logout menghapus session, bukan isi cart Hive.
+  // logout hanya menghapus session bukan database keranjnag
   Future<void> handleLogout() async {
     await SessionService.logout();
 
@@ -28,23 +31,19 @@ class _RootPageState extends State<RootPage> {
     );
   }
 
-  // [SESUAIKAN] Halaman detail akan dibuat di batch berikutnya.
+  // kirim objek produk ke halaman detail
   void handleProductTap(Product product) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '${product.title} dipilih. Detail dibuat pada Batch berikutnya.',
-        ),
-      ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => DetailPage(product: product)),
     );
   }
 
-  // [SESUAIKAN] Halaman cart akan dibuat di batch berikutnya.
+  // home buka halaman keranjang
   void handleCartTap() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Halaman keranjang dibuat pada Batch berikutnya.'),
-      ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CartPage()),
     );
   }
 
@@ -52,7 +51,9 @@ class _RootPageState extends State<RootPage> {
   Widget build(BuildContext context) {
     final pages = [
       HomePage(onProductTap: handleProductTap, onCartTap: handleCartTap),
+
       const NearbyPlaceholder(),
+
       ProfilePlaceholder(onLogout: handleLogout),
     ];
 
@@ -90,7 +91,6 @@ class _RootPageState extends State<RootPage> {
   }
 }
 
-// [BONUS] Placeholder Nearby, akan diganti nanti.
 class NearbyPlaceholder extends StatelessWidget {
   const NearbyPlaceholder({super.key});
 
@@ -105,7 +105,6 @@ class NearbyPlaceholder extends StatelessWidget {
   }
 }
 
-// Placeholder Profile, sementara tetap bisa logout.
 class ProfilePlaceholder extends StatelessWidget {
   final Future<void> Function() onLogout;
 

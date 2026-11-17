@@ -46,7 +46,7 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  // [PENTING] Ambil data produk dari API.
+  // ambil data produk dari API
   Future<void> fetchProducts() async {
     setState(() {
       isLoading = true;
@@ -58,7 +58,7 @@ class _HomePageState extends State<HomePage> {
 
       if (!mounted) return;
 
-      // Kategori diambil otomatis dari data API.
+      // kategori diambil otomatis dari data API
       final categoryList =
           result.map((product) => product.category).toSet().toList()..sort();
 
@@ -77,7 +77,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // [PENTING] Filter kategori dan pencarian digabung.
+  // filter kategori dan pencarian digabung
   List<Product> get filteredProducts {
     return products.where((product) {
       final matchesSearch = product.title.toLowerCase().contains(
@@ -99,19 +99,19 @@ class _HomePageState extends State<HomePage> {
       body: SafeArea(
         child: Column(
           children: [
-            // Header dan search bar.
+            // header dan search bar
             buildHeader(),
 
-            // Chip kategori.
+            // chip kategori
             if (!isLoading && errorMessage == null) buildCategoryList(),
 
-            // Daftar produk.
+            // list produk
             Expanded(child: buildProductContent()),
           ],
         ),
       ),
 
-      // [PENTING] FAB keranjang dengan badge dari Hive.
+      // keranjang dengan badge dari Hive
       floatingActionButton: FloatingActionButton.extended(
         onPressed: widget.onCartTap,
         backgroundColor: const Color(0xFFE5738A),
@@ -164,7 +164,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // Header sapaan dan search.
+  // header sapa pengguna dan search bar
   Widget buildHeader() {
     return Container(
       width: double.infinity,
@@ -201,7 +201,7 @@ class _HomePageState extends State<HomePage> {
 
           const SizedBox(height: 18),
 
-          // Search bar.
+          // search bar
           TextField(
             controller: searchController,
             onChanged: (value) {
@@ -253,7 +253,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // Daftar kategori horizontal.
+  // daftar kategori
   Widget buildCategoryList() {
     return SizedBox(
       height: 62,
@@ -300,7 +300,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // Konten utama Home.
+  // konten utama
   Widget buildProductContent() {
     if (isLoading) {
       return const Center(
