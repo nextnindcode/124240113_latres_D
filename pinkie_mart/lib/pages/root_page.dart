@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../models/product.dart';
 import '../services/session_service.dart';
+import 'home_page.dart';
 import 'login_page.dart';
 
 class RootPage extends StatefulWidget {
@@ -13,6 +15,7 @@ class RootPage extends StatefulWidget {
 class _RootPageState extends State<RootPage> {
   int selectedIndex = 0;
 
+  // [PENTING] Logout menghapus session, bukan isi cart Hive.
   Future<void> handleLogout() async {
     await SessionService.logout();
 
@@ -25,10 +28,30 @@ class _RootPageState extends State<RootPage> {
     );
   }
 
+  // [SESUAIKAN] Halaman detail akan dibuat di batch berikutnya.
+  void handleProductTap(Product product) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${product.title} dipilih. Detail dibuat pada Batch berikutnya.',
+        ),
+      ),
+    );
+  }
+
+  // [SESUAIKAN] Halaman cart akan dibuat di batch berikutnya.
+  void handleCartTap() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Halaman keranjang dibuat pada Batch berikutnya.'),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = [
-      const HomePlaceholder(),
+      HomePage(onProductTap: handleProductTap, onCartTap: handleCartTap),
       const NearbyPlaceholder(),
       ProfilePlaceholder(onLogout: handleLogout),
     ];
@@ -43,22 +66,22 @@ class _RootPageState extends State<RootPage> {
             selectedIndex = index;
           });
         },
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFFFFEFD2),
         indicatorColor: const Color(0xFFFBC9C0),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
+            selectedIcon: Icon(Icons.home_rounded),
             label: 'Home',
           ),
           NavigationDestination(
             icon: Icon(Icons.location_on_outlined),
-            selectedIcon: Icon(Icons.location_on),
+            selectedIcon: Icon(Icons.location_on_rounded),
             label: 'Nearby',
           ),
           NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
+            icon: Icon(Icons.person_outline_rounded),
+            selectedIcon: Icon(Icons.person_rounded),
             label: 'Profile',
           ),
         ],
@@ -67,38 +90,7 @@ class _RootPageState extends State<RootPage> {
   }
 }
 
-// Placeholder Home.
-class HomePlaceholder extends StatelessWidget {
-  const HomePlaceholder({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Pinkie Party Mart')),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(Icons.celebration, size: 75, color: Color(0xFFE5738A)),
-            SizedBox(height: 15),
-            Text(
-              'Welcome to Pinkie Party Mart!',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF4A2C2A),
-              ),
-            ),
-            SizedBox(height: 8),
-            Text('Halaman Home akan dibuat pada Batch 5.'),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// Placeholder Nearby.
+// [BONUS] Placeholder Nearby, akan diganti nanti.
 class NearbyPlaceholder extends StatelessWidget {
   const NearbyPlaceholder({super.key});
 
@@ -107,13 +99,13 @@ class NearbyPlaceholder extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Nearby Outlets')),
       body: const Center(
-        child: Text('Halaman Nearby akan dibuat pada Batch berikutnya.'),
+        child: Text('Halaman Nearby akan dibuat pada batch berikutnya.'),
       ),
     );
   }
 }
 
-// Placeholder Profile.
+// Placeholder Profile, sementara tetap bisa logout.
 class ProfilePlaceholder extends StatelessWidget {
   final Future<void> Function() onLogout;
 
@@ -130,7 +122,11 @@ class ProfilePlaceholder extends StatelessWidget {
             const CircleAvatar(
               radius: 45,
               backgroundColor: Color(0xFFFBC9C0),
-              child: Icon(Icons.person, size: 50, color: Color(0xFFE5738A)),
+              child: Icon(
+                Icons.person_rounded,
+                size: 50,
+                color: Color(0xFFE5738A),
+              ),
             ),
 
             const SizedBox(height: 15),
@@ -154,7 +150,7 @@ class ProfilePlaceholder extends StatelessWidget {
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: onLogout,
-                icon: const Icon(Icons.logout),
+                icon: const Icon(Icons.logout_rounded),
                 label: const Text('Logout'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFE5738A),
