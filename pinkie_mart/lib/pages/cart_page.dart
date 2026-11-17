@@ -3,51 +3,134 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models/cart_item.dart';
 import '../services/cart_service.dart';
+import '../services/order_service.dart';
 import '../services/session_service.dart';
+import 'order_history_page.dart';
 
 class CartPage extends StatelessWidget {
   const CartPage({super.key});
+
+  Future<void> processCheckout(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFFFFEFD2),
+          title: const Text(
+            'Konfirmasi Checkout 🎀',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF4A2C2A),
+            ),
+          ),
+          content: const Text(
+            'Apakah kamu yakin ingin menyelesaikan pesanan ini?',
+            style: TextStyle(color: Color(0xFF6D514D)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, false);
+              },
+              child: const Text(
+                'Nanti',
+                style: TextStyle(color: Color(0xFF8D6460)),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, true);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE5738A),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Ya, Checkout'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final orderId = await OrderService.checkout(SessionService.currentUser);
+
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('🎉 Checkout berhasil! Pesanan: $orderId'),
+          backgroundColor: const Color(0xFF6AB0AF),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const OrderHistoryPage()),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Checkout gagal: $e'),
+          backgroundColor: const Color(0xFFD9534F),
+        ),
+      );
+    }
+  }
+
+  void openOrderHistory(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const OrderHistoryPage()),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final username = SessionService.currentUser;
 
-    // baca perubahan db di Hive
     return ValueListenableBuilder<Box<CartItem>>(
       valueListenable: Hive.box<CartItem>('cart').listenable(),
       builder: (context, box, child) {
-        // cart harus difilter berdasarkan username aktif
         final items = CartService.itemsOf(username);
         final total = CartService.totalOf(username);
 
         return Scaffold(
           backgroundColor: const Color(0xFFFFE5DE),
-
           appBar: AppBar(
             title: const Text('Keranjang Belanja'),
             backgroundColor: const Color(0xFFF5A89A),
+            actions: [
+              IconButton(
+                tooltip: 'Riwayat Pesanan',
+                onPressed: () => openOrderHistory(context),
+                icon: const Icon(Icons.receipt_long_rounded),
+              ),
+              const SizedBox(width: 5),
+            ],
           ),
-
           body: items.isEmpty
               ? buildEmptyCart()
               : ListView.builder(
                   padding: const EdgeInsets.all(15),
                   itemCount: items.length,
                   itemBuilder: (context, index) {
-                    final item = items[index];
-
-                    return buildCartItem(context, item);
+                    return buildCartItem(context, items[index]);
                   },
                 ),
-
-          // total harga ditampilkan di bagian bawah
-          bottomNavigationBar: items.isEmpty ? null : buildTotalBar(total),
+          bottomNavigationBar: items.isEmpty
+              ? null
+              : buildTotalBar(context, total),
         );
       },
     );
   }
 
-  // tampilan pas keranjang kosong
   Widget buildEmptyCart() {
     return Center(
       child: Padding(
@@ -60,9 +143,7 @@ class CartPage extends StatelessWidget {
               size: 90,
               color: Color(0xFFE5738A),
             ),
-
             const SizedBox(height: 20),
-
             const Text(
               'Keranjangmu masih kosong, yuk bikin pesta! 🎉',
               textAlign: TextAlign.center,
@@ -72,13 +153,20 @@ class CartPage extends StatelessWidget {
                 color: Color(0xFF4A2C2A),
               ),
             ),
-
             const SizedBox(height: 10),
-
             const Text(
               'Pilih produk favoritmu dan masukkan ke keranjang.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Color(0xFF8D6460)),
+            ),
+            const SizedBox(height: 20),
+            OutlinedButton.icon(
+              onPressed: () {},
+              icon: const Icon(Icons.favorite_border_rounded),
+              label: const Text('Happy Shopping!'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFE5738A),
+              ),
             ),
           ],
         ),
@@ -86,7 +174,6 @@ class CartPage extends StatelessWidget {
     );
   }
 
-  // kartu satu item keranjang
   Widget buildCartItem(BuildContext context, CartItem item) {
     return Card(
       color: Colors.white,
@@ -97,7 +184,6 @@ class CartPage extends StatelessWidget {
         padding: const EdgeInsets.all(10),
         child: Row(
           children: [
-            // gambar produk
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Container(
@@ -121,10 +207,7 @@ class CartPage extends StatelessWidget {
                       ),
               ),
             ),
-
             const SizedBox(width: 12),
-
-            // informasi produk
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -139,9 +222,7 @@ class CartPage extends StatelessWidget {
                       fontSize: 14,
                     ),
                   ),
-
                   const SizedBox(height: 6),
-
                   Text(
                     '${item.qty} × \$${item.price.toStringAsFixed(2)}',
                     style: const TextStyle(
@@ -149,9 +230,7 @@ class CartPage extends StatelessWidget {
                       fontSize: 12,
                     ),
                   ),
-
                   const SizedBox(height: 5),
-
                   Text(
                     'Subtotal: \$${(item.price * item.qty).toStringAsFixed(2)}',
                     style: const TextStyle(
@@ -163,8 +242,6 @@ class CartPage extends StatelessWidget {
                 ],
               ),
             ),
-
-            // hapus item dari Hive
             IconButton(
               onPressed: () async {
                 await CartService.remove(item);
@@ -181,8 +258,7 @@ class CartPage extends StatelessWidget {
     );
   }
 
-  // total harga keranjang
-  Widget buildTotalBar(double total) {
+  Widget buildTotalBar(BuildContext context, double total) {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 15, 20, 20),
       decoration: const BoxDecoration(
@@ -197,34 +273,58 @@ class CartPage extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Total Belanja',
-                  style: TextStyle(fontSize: 13, color: Color(0xFF8D6460)),
+                const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Total Belanja',
+                      style: TextStyle(fontSize: 13, color: Color(0xFF8D6460)),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Pinkie Party Mart',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF4A2C2A),
+                      ),
+                    ),
+                  ],
                 ),
-                SizedBox(height: 4),
                 Text(
-                  'Pinkie Party Mart',
-                  style: TextStyle(
+                  '\$${total.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF4A2C2A),
+                    color: Color(0xFFE5738A),
                   ),
                 ),
               ],
             ),
-
-            Text(
-              '\$${total.toStringAsFixed(2)}',
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFFE5738A),
+            const SizedBox(height: 15),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => processCheckout(context),
+                icon: const Icon(Icons.shopping_bag_rounded),
+                label: const Text(
+                  'Checkout Sekarang',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE5738A),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
               ),
             ),
           ],

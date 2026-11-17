@@ -4,6 +4,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import 'controller/wishlist_controller.dart';
 import 'models/cart_item.dart';
+import 'models/order_item.dart';
 import 'models/wishlist_item.dart';
 import 'pages/splash_page.dart';
 import 'services/notification_service.dart';
@@ -15,14 +16,19 @@ Future<void> main() async {
   // Inisialisasi Hive.
   await Hive.initFlutter();
 
-  // Registrasi adapter CartItem.
+  // Adapter keranjang.
   if (!Hive.isAdapterRegistered(0)) {
     Hive.registerAdapter(CartItemAdapter());
   }
 
-  // Registrasi adapter WishlistItem.
+  // Adapter Wishlist.
   if (!Hive.isAdapterRegistered(1)) {
     Hive.registerAdapter(WishlistItemAdapter());
+  }
+
+  // Adapter riwayat pesanan.
+  if (!Hive.isAdapterRegistered(2)) {
+    Hive.registerAdapter(OrderItemAdapter());
   }
 
   // Membuka database keranjang.
@@ -30,6 +36,12 @@ Future<void> main() async {
 
   // Membuka database Wishlist.
   await Hive.openBox<WishlistItem>('wishlist');
+
+  // Membuka database riwayat pesanan.
+  await Hive.openBox<OrderItem>('orders');
+
+  // Membuka database stok lokal.
+  await Hive.openBox<int>('product_stock');
 
   // Inisialisasi session login.
   await SessionService.init();
