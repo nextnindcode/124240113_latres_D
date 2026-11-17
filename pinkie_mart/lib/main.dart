@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import 'models/cart_item.dart';
@@ -38,7 +39,7 @@ class PinkiePartyMart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return GetMaterialApp(
       title: 'Pinkie Party Mart',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
+import '../controllers/root_navigation_controller.dart';
 import '../models/product.dart';
 import '../services/session_service.dart';
 import '../theme/app_theme.dart';
@@ -18,14 +20,17 @@ class RootPage extends StatefulWidget {
 }
 
 class _RootPageState extends State<RootPage> {
-  int selectedIndex = 0;
+  late final RootNavigationController navigationController;
 
-  // halaman dibuat sekali supaya Home tidak fetch API berulang
+  // Halaman dibuat sekali supaya Home tidak fetch API berulang.
   late final List<Widget> pages;
 
   @override
   void initState() {
     super.initState();
+
+    // Mendaftarkan controller ke GetX.
+    navigationController = Get.put(RootNavigationController());
 
     pages = [
       HomePage(onProductTap: handleProductTap, onCartTap: handleCartTap),
@@ -34,7 +39,7 @@ class _RootPageState extends State<RootPage> {
     ];
   }
 
-  // buka halaman detail produk
+  // Membuka halaman detail produk.
   void handleProductTap(Product product) {
     Navigator.push(
       context,
@@ -42,7 +47,7 @@ class _RootPageState extends State<RootPage> {
     );
   }
 
-  // buka halaman keranjang
+  // Membuka halaman keranjang.
   void handleCartTap() {
     Navigator.push(
       context,
@@ -50,7 +55,7 @@ class _RootPageState extends State<RootPage> {
     );
   }
 
-  // logout hanya menghapus session, bukan data Hive
+  // Logout hanya menghapus session, bukan data Hive.
   Future<void> logout() async {
     await SessionService.logout();
 
@@ -64,36 +69,46 @@ class _RootPageState extends State<RootPage> {
   }
 
   @override
+  void dispose() {
+    // Menghapus controller ketika RootPage tidak digunakan.
+    if (Get.isRegistered<RootNavigationController>()) {
+      Get.delete<RootNavigationController>();
+    }
+
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(index: selectedIndex, children: pages),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: selectedIndex,
-        onTap: (index) {
-          setState(() {
-            selectedIndex = index;
-          });
-        },
-        backgroundColor: AppTheme.cream,
-        selectedItemColor: AppTheme.pinkDeep,
-        unselectedItemColor: AppTheme.ink.withValues(alpha: 0.55),
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_rounded),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.location_on_rounded),
-            label: 'Nearby',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_rounded),
-            label: 'Profile',
-          ),
-        ],
-      ),
-    );
+    return Obx(() {
+      final selectedIndex = navigationController.selectedIndex.value;
+
+      return Scaffold(
+        body: IndexedStack(index: selectedIndex, children: pages),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: selectedIndex,
+          onTap: navigationController.changeTab,
+          backgroundColor: AppTheme.cream,
+          selectedItemColor: AppTheme.pinkDeep,
+          unselectedItemColor: AppTheme.ink.withValues(alpha: 0.55),
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
+          type: BottomNavigationBarType.fixed,
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home_rounded),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.location_on_rounded),
+              label: 'Nearby',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person_rounded),
+              label: 'Profile',
+            ),
+          ],
+        ),
+      );
+    });
   }
 }
