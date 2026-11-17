@@ -2,10 +2,57 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../controller/wishlist_controller.dart';
+import '../models/product.dart';
 import '../models/wishlist_item.dart';
+import '../services/api_service.dart';
+import 'detail_page.dart';
 
 class WishlistPage extends StatelessWidget {
   const WishlistPage({super.key});
+
+  Future<void> openProduct(BuildContext context, WishlistItem item) async {
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Memuat detail produk...'),
+          duration: Duration(milliseconds: 700),
+        ),
+      );
+
+      final products = await ApiService.fetchProducts();
+
+      final Product? product = products.cast<Product?>().firstWhere(
+        (product) => product?.id == item.productId,
+        orElse: () => null,
+      );
+
+      if (!context.mounted) return;
+
+      if (product == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Produk tidak ditemukan di API.'),
+            backgroundColor: Color(0xFFD9534F),
+          ),
+        );
+        return;
+      }
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => DetailPage(product: product)),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal membuka produk: $e'),
+          backgroundColor: const Color(0xFFD9534F),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -95,7 +142,6 @@ class WishlistPage extends StatelessWidget {
           SnackBar(
             content: Text('${item.title} dihapus dari Wishlist'),
             backgroundColor: const Color(0xFFD9534F),
-            behavior: SnackBarBehavior.floating,
           ),
         );
       },
@@ -104,82 +150,94 @@ class WishlistPage extends StatelessWidget {
         elevation: 2,
         margin: const EdgeInsets.only(bottom: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  width: 85,
-                  height: 85,
-                  color: const Color(0xFFFBC9C0),
-                  child: Image.network(
-                    item.image,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Icon(
-                        Icons.image_not_supported_rounded,
-                        color: Color(0xFFE5738A),
-                      );
-                    },
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => openProduct(context, item),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    width: 85,
+                    height: 85,
+                    color: const Color(0xFFFBC9C0),
+                    child: Image.network(
+                      item.image,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(
+                          Icons.image_not_supported_rounded,
+                          color: Color(0xFFE5738A),
+                        );
+                      },
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                        color: Color(0xFF4A2C2A),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: Color(0xFF4A2C2A),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      item.category.replaceAll('-', ' '),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF8D6460),
+                      const SizedBox(height: 6),
+                      Text(
+                        item.category.replaceAll('-', ' '),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF8D6460),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '\$${item.price.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFFE5738A),
+                      const SizedBox(height: 6),
+                      Text(
+                        '\$${item.price.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFE5738A),
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 5),
+                      const Text(
+                        'Ketuk untuk melihat detail',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Color(0xFF8D6460),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              IconButton(
-                tooltip: 'Hapus dari Wishlist',
-                onPressed: () async {
-                  await controller.removeItem(item);
+                IconButton(
+                  tooltip: 'Hapus dari Wishlist',
+                  onPressed: () async {
+                    await controller.removeItem(item);
 
-                  if (!context.mounted) return;
+                    if (!context.mounted) return;
 
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('${item.title} dihapus dari Wishlist'),
-                      backgroundColor: const Color(0xFFD9534F),
-                    ),
-                  );
-                },
-                icon: const Icon(
-                  Icons.favorite_rounded,
-                  color: Color(0xFFE5738A),
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('${item.title} dihapus dari Wishlist'),
+                        backgroundColor: const Color(0xFFD9534F),
+                      ),
+                    );
+                  },
+                  icon: const Icon(
+                    Icons.favorite_rounded,
+                    color: Color(0xFFE5738A),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

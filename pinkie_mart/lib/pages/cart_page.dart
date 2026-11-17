@@ -7,63 +7,114 @@ import '../services/order_service.dart';
 import '../services/session_service.dart';
 import 'order_history_page.dart';
 
-class CartPage extends StatelessWidget {
+class CartPage extends StatefulWidget {
   const CartPage({super.key});
 
-  Future<void> processCheckout(BuildContext context) async {
+  @override
+  State<CartPage> createState() => _CartPageState();
+}
+
+class _CartPageState extends State<CartPage> {
+  bool isCheckingOut = false;
+
+  String get username => SessionService.currentUser;
+
+  Future<void> changeQuantity(CartItem item, int newQty) async {
+    final wasLimited = await CartService.updateQty(item, newQty);
+
+    if (!mounted) return;
+
+    if (wasLimited) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Jumlah sudah mencapai batas stok tersedia.'),
+          backgroundColor: Color(0xFFD9534F),
+        ),
+      );
+    }
+  }
+
+  Future<void> removeItem(CartItem item) async {
+    await CartService.remove(item);
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${item.title} dihapus dari keranjang.'),
+        backgroundColor: const Color(0xFFD9534F),
+      ),
+    );
+  }
+
+  Future<void> confirmCheckout() async {
+    final items = CartService.itemsOf(username);
+
+    if (items.isEmpty || isCheckingOut) return;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
           backgroundColor: const Color(0xFFFFEFD2),
           title: const Text(
-            'Konfirmasi Checkout 🎀',
+            'Konfirmasi Checkout',
             style: TextStyle(
-              fontWeight: FontWeight.bold,
               color: Color(0xFF4A2C2A),
+              fontWeight: FontWeight.bold,
             ),
           ),
-          content: const Text(
-            'Apakah kamu yakin ingin menyelesaikan pesanan ini?',
-            style: TextStyle(color: Color(0xFF6D514D)),
+          content: Text(
+            'Total belanja kamu adalah '
+            '\$${CartService.totalOf(username).toStringAsFixed(2)}. '
+            'Lanjutkan checkout?',
+            style: const TextStyle(color: Color(0xFF4A2C2A)),
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, false);
-              },
-              child: const Text(
-                'Nanti',
-                style: TextStyle(color: Color(0xFF8D6460)),
-              ),
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Batal'),
             ),
             ElevatedButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, true);
-              },
+              onPressed: () => Navigator.pop(dialogContext, true),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFE5738A),
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Ya, Checkout'),
+              child: const Text('Checkout'),
             ),
           ],
         );
       },
     );
 
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
+
+    setState(() {
+      isCheckingOut = true;
+    });
 
     try {
-      final orderId = await OrderService.checkout(SessionService.currentUser);
+      // Checkout mengembalikan String berupa ID pesanan.
+      final orderId = await OrderService.checkout(username);
 
-      if (!context.mounted) return;
+      if (!mounted) return;
+
+      // ID pesanan yang tidak kosong menandakan checkout berhasil.
+      if (orderId.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Checkout gagal. Silakan coba kembali.'),
+            backgroundColor: Color(0xFFD9534F),
+          ),
+        );
+        return;
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('🎉 Checkout berhasil! Pesanan: $orderId'),
+          content: Text('Checkout berhasil! ID Pesanan: $orderId 🎉'),
           backgroundColor: const Color(0xFF6AB0AF),
-          duration: const Duration(seconds: 3),
         ),
       );
 
@@ -72,7 +123,7 @@ class CartPage extends StatelessWidget {
         MaterialPageRoute(builder: (_) => const OrderHistoryPage()),
       );
     } catch (e) {
-      if (!context.mounted) return;
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -80,20 +131,17 @@ class CartPage extends StatelessWidget {
           backgroundColor: const Color(0xFFD9534F),
         ),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isCheckingOut = false;
+        });
+      }
     }
-  }
-
-  void openOrderHistory(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const OrderHistoryPage()),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final username = SessionService.currentUser;
-
     return ValueListenableBuilder<Box<CartItem>>(
       valueListenable: Hive.box<CartItem>('cart').listenable(),
       builder: (context, box, child) {
@@ -105,14 +153,7 @@ class CartPage extends StatelessWidget {
           appBar: AppBar(
             title: const Text('Keranjang Belanja'),
             backgroundColor: const Color(0xFFF5A89A),
-            actions: [
-              IconButton(
-                tooltip: 'Riwayat Pesanan',
-                onPressed: () => openOrderHistory(context),
-                icon: const Icon(Icons.receipt_long_rounded),
-              ),
-              const SizedBox(width: 5),
-            ],
+            foregroundColor: const Color(0xFF4A2C2A),
           ),
           body: items.isEmpty
               ? buildEmptyCart()
@@ -120,17 +161,16 @@ class CartPage extends StatelessWidget {
                   padding: const EdgeInsets.all(15),
                   itemCount: items.length,
                   itemBuilder: (context, index) {
-                    return buildCartItem(context, items[index]);
+                    return buildCartItem(items[index]);
                   },
                 ),
-          bottomNavigationBar: items.isEmpty
-              ? null
-              : buildTotalBar(context, total),
+          bottomNavigationBar: items.isEmpty ? null : buildTotalBar(total),
         );
       },
     );
   }
 
+  // Tampilan ketika keranjang kosong.
   Widget buildEmptyCart() {
     return Center(
       child: Padding(
@@ -145,28 +185,26 @@ class CartPage extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             const Text(
-              'Keranjangmu masih kosong, yuk bikin pesta! 🎉',
+              'Keranjangmu masih kosong!',
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 17,
+                fontSize: 19,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF4A2C2A),
               ),
             ),
             const SizedBox(height: 10),
             const Text(
-              'Pilih produk favoritmu dan masukkan ke keranjang.',
+              'Belum ada produk yang kamu pilih. '
+              'Yuk, cari perlengkapan pesta favoritmu!',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Color(0xFF8D6460)),
+              style: TextStyle(color: Color(0xFF8D6460), height: 1.5),
             ),
-            const SizedBox(height: 20),
-            OutlinedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.favorite_border_rounded),
-              label: const Text('Happy Shopping!'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFE5738A),
-              ),
+            const SizedBox(height: 18),
+            const Icon(
+              Icons.celebration_rounded,
+              size: 35,
+              color: Color(0xFFF5A89A),
             ),
           ],
         ),
@@ -174,21 +212,26 @@ class CartPage extends StatelessWidget {
     );
   }
 
-  Widget buildCartItem(BuildContext context, CartItem item) {
+  // Kartu produk dalam keranjang.
+  Widget buildCartItem(CartItem item) {
+    final availableStock = CartService.stockOfCartItem(item);
+    final canIncrease = item.qty < availableStock;
+
     return Card(
       color: Colors.white,
       elevation: 2,
       margin: const EdgeInsets.only(bottom: 13),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(10),
+        padding: const EdgeInsets.all(11),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Container(
-                width: 85,
-                height: 85,
+                width: 82,
+                height: 82,
                 color: const Color(0xFFFBC9C0),
                 child: item.image.isEmpty
                     ? const Icon(
@@ -222,9 +265,9 @@ class CartPage extends StatelessWidget {
                       fontSize: 14,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 5),
                   Text(
-                    '${item.qty} × \$${item.price.toStringAsFixed(2)}',
+                    '\$${item.price.toStringAsFixed(2)} / item',
                     style: const TextStyle(
                       color: Color(0xFF8D6460),
                       fontSize: 12,
@@ -239,18 +282,54 @@ class CartPage extends StatelessWidget {
                       fontSize: 13,
                     ),
                   ),
+                  const SizedBox(height: 5),
+                  Text(
+                    'Stok tersedia: $availableStock',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF8D6460),
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  Row(
+                    children: [
+                      _quantityButton(
+                        icon: Icons.remove,
+                        enabled: item.qty > 1,
+                        onPressed: () {
+                          changeQuantity(item, item.qty - 1);
+                        },
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        child: Text(
+                          '${item.qty}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: Color(0xFF4A2C2A),
+                          ),
+                        ),
+                      ),
+                      _quantityButton(
+                        icon: Icons.add,
+                        enabled: canIncrease,
+                        onPressed: () {
+                          changeQuantity(item, item.qty + 1);
+                        },
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
             IconButton(
-              onPressed: () async {
-                await CartService.remove(item);
-              },
+              tooltip: 'Hapus produk',
+              onPressed: () => removeItem(item),
               icon: const Icon(
                 Icons.delete_outline_rounded,
                 color: Color(0xFFD9534F),
               ),
-              tooltip: 'Hapus produk',
             ),
           ],
         ),
@@ -258,9 +337,33 @@ class CartPage extends StatelessWidget {
     );
   }
 
-  Widget buildTotalBar(BuildContext context, double total) {
+  Widget _quantityButton({
+    required IconData icon,
+    required bool enabled,
+    required VoidCallback onPressed,
+  }) {
+    return SizedBox(
+      width: 30,
+      height: 30,
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        onPressed: enabled ? onPressed : null,
+        icon: Icon(icon, size: 17),
+        style: IconButton.styleFrom(
+          backgroundColor: enabled
+              ? const Color(0xFFFBC9C0)
+              : Colors.grey.shade200,
+          foregroundColor: const Color(0xFF4A2C2A),
+          disabledForegroundColor: Colors.grey,
+        ),
+      ),
+    );
+  }
+
+  // Ringkasan belanja dan tombol checkout.
+  Widget buildTotalBar(double total) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 15, 20, 20),
+      padding: const EdgeInsets.fromLTRB(18, 15, 18, 18),
       decoration: const BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -279,48 +382,46 @@ class CartPage extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Total Belanja',
-                      style: TextStyle(fontSize: 13, color: Color(0xFF8D6460)),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Pinkie Party Mart',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF4A2C2A),
-                      ),
-                    ),
-                  ],
+                const Text(
+                  'Total Belanja',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF4A2C2A),
+                  ),
                 ),
                 Text(
                   '\$${total.toStringAsFixed(2)}',
                   style: const TextStyle(
-                    fontSize: 20,
+                    fontSize: 21,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFFE5738A),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 15),
+            const SizedBox(height: 13),
             SizedBox(
               width: double.infinity,
+              height: 50,
               child: ElevatedButton.icon(
-                onPressed: () => processCheckout(context),
-                icon: const Icon(Icons.shopping_bag_rounded),
-                label: const Text(
-                  'Checkout Sekarang',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                onPressed: isCheckingOut ? null : confirmCheckout,
+                icon: isCheckingOut
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.shopping_bag_rounded),
+                label: Text(
+                  isCheckingOut ? 'Memproses...' : 'Checkout Sekarang',
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFE5738A),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 15),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
+import '../controller/wishlist_controller.dart';
 import '../models/product.dart';
 import '../services/cart_service.dart';
 import '../services/notification_service.dart';
 import '../services/session_service.dart';
+import '../theme/app_theme.dart';
 import '../widgets/qty_selector.dart';
 
 class DetailPage extends StatefulWidget {
@@ -18,15 +21,19 @@ class DetailPage extends StatefulWidget {
 
 class _DetailPageState extends State<DetailPage> {
   int quantity = 1;
-  bool isAdding = false;
   int selectedImage = 0;
+  bool isAdding = false;
 
   Product get product => widget.product;
 
-  // [PENTING] Stok diambil dari Hive, bukan hanya dari API.
-  int get availableStock => CartService.stockOf(product);
+  late final WishlistController wishlistController;
 
-  // Ambil gambar produk dari API.
+  @override
+  void initState() {
+    super.initState();
+    wishlistController = Get.find<WishlistController>();
+  }
+
   List<String> get productImages {
     final images = product.images
         .whereType<String>()
@@ -40,19 +47,28 @@ class _DetailPageState extends State<DetailPage> {
     return images;
   }
 
-  // [PENTING] Tambahkan produk menggunakan stok terbaru.
-  Future<void> addToCart() async {
-    final stock = availableStock;
+  // Menambah atau menghapus produk dari Wishlist.
+  Future<void> toggleFavorite() async {
+    final added = await wishlistController.toggleWishlist(product);
 
-    if (stock <= 0 || quantity <= 0 || quantity > stock) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Stok produk tidak mencukupi.'),
-          backgroundColor: Color(0xFFD9534F),
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          added
+              ? '${product.title} ditambahkan ke Wishlist 💗'
+              : '${product.title} dihapus dari Wishlist',
         ),
-      );
-      return;
-    }
+        backgroundColor: const Color(0xFFE5738A),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // Menambahkan produk ke keranjang.
+  Future<void> addToCart(int availableStock) async {
+    if (availableStock <= 0 || quantity <= 0 || isAdding) return;
 
     setState(() {
       isAdding = true;
@@ -85,7 +101,6 @@ class _DetailPageState extends State<DetailPage> {
         );
       }
 
-      // [BONUS] Notifikasi saat produk berhasil ditambahkan.
       try {
         await NotificationService.showCartNotification(
           productName: product.title,
@@ -114,30 +129,36 @@ class _DetailPageState extends State<DetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    // [PENTING] Halaman ikut rebuild saat stok di Hive berubah.
     return ValueListenableBuilder<Box<int>>(
       valueListenable: Hive.box<int>('product_stock').listenable(),
       builder: (context, stockBox, child) {
-        final stock = availableStock;
-
-        // Pastikan quantity selalu sesuai stok terbaru.
-        final safeQuantity = stock <= 0 ? 0 : quantity.clamp(1, stock);
-
-        if (safeQuantity != quantity) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              setState(() {
-                quantity = safeQuantity;
-              });
-            }
-          });
-        }
+        final availableStock = CartService.stockOf(product);
 
         return Scaffold(
-          backgroundColor: const Color(0xFFFFE5DE),
+          backgroundColor: AppTheme.blush,
           appBar: AppBar(
             title: const Text('Detail Produk'),
-            backgroundColor: const Color(0xFFF5A89A),
+            backgroundColor: AppTheme.pink,
+            foregroundColor: AppTheme.ink,
+            actions: [
+              Obx(() {
+                final isFavorite = wishlistController.isFavorite(product.id);
+
+                return IconButton(
+                  tooltip: isFavorite
+                      ? 'Hapus dari Wishlist'
+                      : 'Tambahkan ke Wishlist',
+                  onPressed: toggleFavorite,
+                  icon: Icon(
+                    isFavorite
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                    color: isFavorite ? AppTheme.danger : AppTheme.ink,
+                  ),
+                );
+              }),
+              const SizedBox(width: 5),
+            ],
           ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.only(bottom: 20),
@@ -156,7 +177,7 @@ class _DetailPageState extends State<DetailPage> {
                         style: const TextStyle(
                           fontSize: 23,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF4A2C2A),
+                          color: AppTheme.ink,
                         ),
                       ),
 
@@ -170,7 +191,7 @@ class _DetailPageState extends State<DetailPage> {
                             style: const TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFFE5738A),
+                              color: AppTheme.pinkDeep,
                             ),
                           ),
                           Container(
@@ -179,7 +200,7 @@ class _DetailPageState extends State<DetailPage> {
                               vertical: 7,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFFF2A5),
+                              color: AppTheme.yellow,
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Row(
@@ -194,7 +215,7 @@ class _DetailPageState extends State<DetailPage> {
                                   product.rating.toStringAsFixed(1),
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: Color(0xFF4A2C2A),
+                                    color: AppTheme.ink,
                                   ),
                                 ),
                               ],
@@ -210,26 +231,24 @@ class _DetailPageState extends State<DetailPage> {
                         'Brand',
                         product.brand,
                       ),
-
                       const SizedBox(height: 10),
-
                       buildInfoRow(
                         Icons.category_rounded,
                         'Kategori',
                         product.category,
                       ),
-
                       const SizedBox(height: 10),
-
-                      // Stok terbaru dari Hive.
-                      buildStockInfo(stock),
+                      buildInfoRow(
+                        Icons.inventory_2_rounded,
+                        'Stok',
+                        availableStock > 0
+                            ? '$availableStock tersedia'
+                            : 'Stok habis',
+                      ),
 
                       const SizedBox(height: 22),
-
                       buildSectionTitle('Deskripsi Produk'),
-
                       const SizedBox(height: 8),
-
                       Text(
                         product.description,
                         textAlign: TextAlign.justify,
@@ -240,9 +259,7 @@ class _DetailPageState extends State<DetailPage> {
                       ),
 
                       const SizedBox(height: 22),
-
                       buildSectionTitle('Tags'),
-
                       const SizedBox(height: 8),
 
                       if (product.tags.isEmpty)
@@ -254,7 +271,7 @@ class _DetailPageState extends State<DetailPage> {
                           children: product.tags.map((tag) {
                             return Chip(
                               label: Text(tag.toString()),
-                              backgroundColor: const Color(0xFF6AB0AF),
+                              backgroundColor: AppTheme.teal,
                               labelStyle: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 12,
@@ -265,9 +282,7 @@ class _DetailPageState extends State<DetailPage> {
                         ),
 
                       const SizedBox(height: 22),
-
                       buildSectionTitle('Reviews'),
-
                       const SizedBox(height: 8),
 
                       if (product.reviews.isEmpty)
@@ -276,13 +291,7 @@ class _DetailPageState extends State<DetailPage> {
                         ...product.reviews.take(3).map((review) {
                           final reviewerName =
                               review['reviewerName']?.toString() ?? 'User';
-
-                          final initial = reviewerName.isNotEmpty
-                              ? reviewerName[0].toUpperCase()
-                              : 'U';
-
                           final comment = review['comment']?.toString() ?? '-';
-
                           final rating = review['rating']?.toString() ?? '-';
 
                           return Card(
@@ -290,11 +299,13 @@ class _DetailPageState extends State<DetailPage> {
                             margin: const EdgeInsets.only(bottom: 10),
                             child: ListTile(
                               leading: CircleAvatar(
-                                backgroundColor: const Color(0xFFFBC9C0),
+                                backgroundColor: AppTheme.pinkSoft,
                                 child: Text(
-                                  initial,
+                                  reviewerName.isNotEmpty
+                                      ? reviewerName[0].toUpperCase()
+                                      : 'U',
                                   style: const TextStyle(
-                                    color: Color(0xFF4A2C2A),
+                                    color: AppTheme.ink,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -303,7 +314,7 @@ class _DetailPageState extends State<DetailPage> {
                                 reviewerName,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFF4A2C2A),
+                                  color: AppTheme.ink,
                                 ),
                               ),
                               subtitle: Text(comment),
@@ -322,60 +333,9 @@ class _DetailPageState extends State<DetailPage> {
               ],
             ),
           ),
-          bottomNavigationBar: buildBottomBar(stock),
+          bottomNavigationBar: buildBottomBar(availableStock),
         );
       },
-    );
-  }
-
-  Widget buildStockInfo(int stock) {
-    final isAvailable = stock > 0;
-
-    return Row(
-      children: [
-        Icon(
-          Icons.inventory_2_rounded,
-          size: 20,
-          color: isAvailable
-              ? const Color(0xFF6AB0AF)
-              : const Color(0xFFD9534F),
-        ),
-        const SizedBox(width: 10),
-        const Text(
-          'Stok: ',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF4A2C2A),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            isAvailable ? '$stock tersedia' : 'Stok habis',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: isAvailable
-                  ? const Color(0xFF6AB0AF)
-                  : const Color(0xFFD9534F),
-            ),
-          ),
-        ),
-        if (isAvailable)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFF2A5),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Text(
-              'Ready!',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF4A2C2A),
-              ),
-            ),
-          ),
-      ],
     );
   }
 
@@ -387,12 +347,12 @@ class _DetailPageState extends State<DetailPage> {
         Container(
           height: 270,
           width: double.infinity,
-          color: const Color(0xFFFBC9C0),
+          color: AppTheme.pinkSoft,
           child: images.isEmpty
               ? const Icon(
                   Icons.image_not_supported_rounded,
                   size: 70,
-                  color: Color(0xFFE5738A),
+                  color: AppTheme.pinkDeep,
                 )
               : Image.network(
                   images[selectedImage],
@@ -401,7 +361,7 @@ class _DetailPageState extends State<DetailPage> {
                     return const Icon(
                       Icons.image_not_supported_rounded,
                       size: 70,
-                      color: Color(0xFFE5738A),
+                      color: AppTheme.pinkDeep,
                     );
                   },
                 ),
@@ -431,7 +391,7 @@ class _DetailPageState extends State<DetailPage> {
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: isSelected
-                            ? const Color(0xFFE5738A)
+                            ? AppTheme.pinkDeep
                             : Colors.transparent,
                         width: 2,
                       ),
@@ -458,13 +418,13 @@ class _DetailPageState extends State<DetailPage> {
   Widget buildInfoRow(IconData icon, String label, String value) {
     return Row(
       children: [
-        Icon(icon, size: 20, color: const Color(0xFFE5738A)),
+        Icon(icon, size: 20, color: AppTheme.pinkDeep),
         const SizedBox(width: 10),
         Text(
           '$label: ',
           style: const TextStyle(
             fontWeight: FontWeight.bold,
-            color: Color(0xFF4A2C2A),
+            color: AppTheme.ink,
           ),
         ),
         Expanded(
@@ -480,12 +440,12 @@ class _DetailPageState extends State<DetailPage> {
       style: const TextStyle(
         fontSize: 18,
         fontWeight: FontWeight.bold,
-        color: Color(0xFF4A2C2A),
+        color: AppTheme.ink,
       ),
     );
   }
 
-  Widget buildBottomBar(int stock) {
+  Widget buildBottomBar(int availableStock) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
       decoration: const BoxDecoration(
@@ -503,32 +463,32 @@ class _DetailPageState extends State<DetailPage> {
         child: Row(
           children: [
             QtySelector(
-              quantity: stock <= 0 ? 0 : quantity.clamp(1, stock),
-              stock: stock,
+              quantity: quantity,
+              stock: availableStock,
               onChanged: (value) {
                 setState(() {
                   quantity = value;
                 });
               },
             ),
-
             const SizedBox(width: 12),
-
             Expanded(
               child: SizedBox(
                 height: 50,
                 child: ElevatedButton.icon(
-                  onPressed: stock <= 0 || isAdding ? null : addToCart,
+                  onPressed: availableStock <= 0 || isAdding
+                      ? null
+                      : () => addToCart(availableStock),
                   icon: const Icon(Icons.shopping_cart_rounded),
                   label: Text(
-                    stock <= 0
+                    availableStock <= 0
                         ? 'Stok Habis'
                         : isAdding
                         ? 'Menambahkan...'
                         : 'Add to Cart',
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE5738A),
+                    backgroundColor: AppTheme.pinkDeep,
                     foregroundColor: Colors.white,
                     disabledBackgroundColor: Colors.grey.shade400,
                     shape: RoundedRectangleBorder(

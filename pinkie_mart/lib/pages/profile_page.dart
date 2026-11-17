@@ -1,9 +1,14 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
+import '../controller/wishlist_controller.dart';
 import '../models/cart_item.dart';
+import '../pages/cart_page.dart';
+import '../pages/order_history_page.dart';
+import '../pages/wishlist_page.dart';
 import '../services/cart_service.dart';
 import '../services/profile_photo_service.dart';
 import '../services/session_service.dart';
@@ -24,7 +29,7 @@ class _ProfilePageState extends State<ProfilePage> {
   bool isLoadingPhoto = true;
   bool isSavingPhoto = false;
 
-  final String username = SessionService.currentUser;
+  String get username => SessionService.currentUser;
 
   @override
   void initState() {
@@ -57,7 +62,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
       if (!mounted) return;
 
-      // null berarti pengguna membatalkan pemilihan foto.
       if (newPhoto == null) return;
 
       setState(() {
@@ -71,15 +75,12 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
       );
     } catch (e) {
-      debugPrint('Error pada halaman profil: $e');
-
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Gagal menyimpan foto: $e'),
           backgroundColor: AppTheme.danger,
-          duration: const Duration(seconds: 5),
         ),
       );
     } finally {
@@ -117,7 +118,7 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // Dialog konfirmasi hapus foto.
+  // Dialog konfirmasi menghapus foto.
   void showDeletePhotoDialog() {
     showDialog(
       context: context,
@@ -134,10 +135,8 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-              },
-              child: const Text('Batal', style: TextStyle(color: AppTheme.ink)),
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Batal'),
             ),
             ElevatedButton(
               onPressed: () {
@@ -171,26 +170,25 @@ class _ProfilePageState extends State<ProfilePage> {
             style: TextStyle(color: AppTheme.ink, fontWeight: FontWeight.bold),
           ),
           content: const Text(
-            'Yakin mau pergi? Pestanya belum selesai lho 🥺',
+            'Yakin mau pergi? Pestanya belum selesai lho!',
             style: TextStyle(color: AppTheme.ink),
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-              },
-              child: const Text('Batal', style: TextStyle(color: AppTheme.ink)),
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Batal'),
             ),
-            ElevatedButton(
+            ElevatedButton.icon(
               onPressed: () {
                 Navigator.pop(dialogContext);
                 widget.onLogout();
               },
+              icon: const Icon(Icons.logout_rounded),
+              label: const Text('Logout'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.danger,
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Logout'),
             ),
           ],
         );
@@ -198,7 +196,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // Tampilan foto profil.
+  // Avatar profil.
   Widget buildProfileAvatar() {
     if (isLoadingPhoto) {
       return const CircleAvatar(
@@ -223,8 +221,60 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  // Kartu menu yang bisa ditekan.
+  Widget buildMenuButton({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    String? trailing,
+  }) {
+    return Card(
+      color: Colors.white,
+      elevation: 1,
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+        leading: CircleAvatar(
+          backgroundColor: AppTheme.pinkSoft,
+          child: Icon(icon, color: AppTheme.pinkDeep),
+        ),
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: AppTheme.ink,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: const TextStyle(color: Color(0xFF8D6460), fontSize: 12),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (trailing != null)
+              Text(
+                trailing,
+                style: const TextStyle(
+                  color: AppTheme.pinkDeep,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            const SizedBox(width: 5),
+            const Icon(Icons.chevron_right_rounded, color: AppTheme.pinkDeep),
+          ],
+        ),
+        onTap: onTap,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final wishlistController = Get.find<WishlistController>();
+
     return Scaffold(
       backgroundColor: AppTheme.blush,
       body: SafeArea(
@@ -233,7 +283,7 @@ class _ProfilePageState extends State<ProfilePage> {
             // Header profil.
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 30, 20, 28),
+              padding: const EdgeInsets.fromLTRB(20, 25, 20, 25),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   colors: [AppTheme.pink, AppTheme.pinkSoft],
@@ -246,12 +296,10 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
               child: Column(
                 children: [
-                  // Foto profil dan tombol kamera.
                   Stack(
                     alignment: Alignment.bottomRight,
                     children: [
                       buildProfileAvatar(),
-
                       Material(
                         color: AppTheme.pinkDeep,
                         shape: const CircleBorder(),
@@ -270,9 +318,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 14),
-
                   const Text(
                     'My Profile',
                     style: TextStyle(
@@ -281,17 +327,12 @@ class _ProfilePageState extends State<ProfilePage> {
                       color: AppTheme.ink,
                     ),
                   ),
-
                   const SizedBox(height: 5),
-
                   Text(
                     '@$username',
                     style: const TextStyle(fontSize: 16, color: AppTheme.ink),
                   ),
-
                   const SizedBox(height: 12),
-
-                  // Tombol ganti foto.
                   OutlinedButton.icon(
                     onPressed: isSavingPhoto ? null : changeProfilePhoto,
                     icon: const Icon(Icons.photo_library_rounded),
@@ -303,8 +344,6 @@ class _ProfilePageState extends State<ProfilePage> {
                       side: const BorderSide(color: AppTheme.ink),
                     ),
                   ),
-
-                  // Tombol hapus foto.
                   if (photoBytes != null)
                     TextButton.icon(
                       onPressed: isSavingPhoto ? null : showDeletePhotoDialog,
@@ -318,11 +357,146 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
 
+            // Konten profil.
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.all(18),
                 children: [
-                  // Deskripsi Pinkie Party Mart.
+                  const Text(
+                    'Akun Saya',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Informasi akun.
+                  Card(
+                    color: Colors.white,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.person_rounded,
+                                color: AppTheme.pinkDeep,
+                              ),
+                              const SizedBox(width: 12),
+                              const Text(
+                                'Username',
+                                style: TextStyle(color: AppTheme.ink),
+                              ),
+                              const Spacer(),
+                              Text(
+                                username,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.ink,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 24),
+                          const Row(
+                            children: [
+                              Icon(
+                                Icons.verified_user_rounded,
+                                color: AppTheme.teal,
+                              ),
+                              SizedBox(width: 12),
+                              Text(
+                                'Status akun',
+                                style: TextStyle(color: AppTheme.ink),
+                              ),
+                              Spacer(),
+                              Text(
+                                'Aktif',
+                                style: TextStyle(
+                                  color: AppTheme.teal,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 22),
+                  const Text(
+                    'Aktivitas Belanja',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Tombol keranjang.
+                  ValueListenableBuilder<Box<CartItem>>(
+                    valueListenable: Hive.box<CartItem>('cart').listenable(),
+                    builder: (context, box, child) {
+                      final quantity = CartService.totalQuantityOf(username);
+
+                      return buildMenuButton(
+                        icon: Icons.shopping_cart_rounded,
+                        title: 'Keranjang Saya',
+                        subtitle: 'Lihat dan atur produk yang akan dibeli',
+                        trailing: '$quantity unit',
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const CartPage()),
+                          );
+                        },
+                      );
+                    },
+                  ),
+
+                  // Tombol Wishlist.
+                  Obx(() {
+                    final count = wishlistController.currentUserItems.length;
+
+                    return buildMenuButton(
+                      icon: Icons.favorite_rounded,
+                      title: 'Wishlist Favorit',
+                      subtitle: 'Produk yang kamu sukai',
+                      trailing: '$count produk',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const WishlistPage(),
+                          ),
+                        );
+                      },
+                    );
+                  }),
+
+                  // Tombol riwayat pesanan.
+                  buildMenuButton(
+                    icon: Icons.receipt_long_rounded,
+                    title: 'Riwayat Pesanan',
+                    subtitle: 'Lihat pesanan dan lakukan pembelian ulang',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const OrderHistoryPage(),
+                        ),
+                      );
+                    },
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Informasi aplikasi.
                   Container(
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
@@ -335,7 +509,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         Row(
                           children: [
                             Icon(
-                              Icons.favorite_rounded,
+                              Icons.celebration_rounded,
                               color: AppTheme.pinkDeep,
                             ),
                             SizedBox(width: 8),
@@ -351,62 +525,26 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                         SizedBox(height: 10),
                         Text(
-                          'Penggemar berat pesta, kue, dan balon. '
-                          'Toko ini dibuat dengan banyak gula 🧁',
+                          'Pinkie Party Mart adalah aplikasi toko online '
+                          'perlengkapan pesta. Temukan dekorasi, balon, '
+                          'aksesori, dan berbagai kebutuhan pesta '
+                          'dalam satu aplikasi. 🎀',
                           style: TextStyle(color: AppTheme.ink, height: 1.5),
+                        ),
+                        SizedBox(height: 12),
+                        Text(
+                          'Versi aplikasi: 1.0.0',
+                          style: TextStyle(
+                            color: AppTheme.ink,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                     ),
                   ),
 
-                  const SizedBox(height: 16),
-
-                  // Jumlah produk dalam keranjang.
-                  ValueListenableBuilder<Box<CartItem>>(
-                    valueListenable: Hive.box<CartItem>('cart').listenable(),
-                    builder: (context, box, child) {
-                      final itemCount = CartService.countOf(username);
-
-                      return Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: Row(
-                          children: [
-                            const CircleAvatar(
-                              backgroundColor: AppTheme.pinkSoft,
-                              child: Icon(
-                                Icons.shopping_bag_rounded,
-                                color: AppTheme.pinkDeep,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            const Expanded(
-                              child: Text(
-                                'Produk di keranjang',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  color: AppTheme.ink,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              '$itemCount item',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.pinkDeep,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 22),
 
                   // Tombol logout.
                   ElevatedButton.icon(
@@ -417,6 +555,16 @@ class _ProfilePageState extends State<ProfilePage> {
                       backgroundColor: AppTheme.danger,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                  const Center(
+                    child: Text(
+                      'Made with 💗 for your special party',
+                      style: TextStyle(color: Color(0xFF8D6460), fontSize: 12),
                     ),
                   ),
                 ],

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 
-import '../models/cart_item.dart';
 import '../models/order_item.dart';
+import '../models/product.dart';
+import '../services/api_service.dart';
+import '../services/cart_service.dart';
+import '../services/session_service.dart';
 
 class OrderDetailPage extends StatefulWidget {
   final List<OrderItem> items;
@@ -16,123 +18,137 @@ class OrderDetailPage extends StatefulWidget {
 class _OrderDetailPageState extends State<OrderDetailPage> {
   bool isReordering = false;
 
+  String formatDate(int timestamp) {
+    final date = DateTime.fromMillisecondsSinceEpoch(timestamp).toLocal();
+
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final year = date.year.toString();
+
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+
+    return '$day-$month-$year $hour:$minute';
+  }
+
   double get orderTotal {
     return widget.items.fold(
-      0.0,
+      0,
       (total, item) => total + (item.price * item.qty),
     );
   }
 
+  // Memasukkan kembali produk pesanan ke keranjang.
   Future<void> reorderItems() async {
-    if (isReordering || widget.items.isEmpty) return;
+    if (isReordering) return;
 
-    setState(() => isReordering = true);
-
-    int addedCount = 0;
-    int unavailableCount = 0;
+    setState(() {
+      isReordering = true;
+    });
 
     try {
-      final cartBox = Hive.box<CartItem>('cart');
-      final stockBox = Hive.box<int>('product_stock');
-      final username = widget.items.first.username;
+      // Ambil data produk terbaru dari API.
+      final products = await ApiService.fetchProducts();
+
+      int addedCount = 0;
+      int unavailableCount = 0;
+      int limitedCount = 0;
 
       for (final orderItem in widget.items) {
-        final availableStock = stockBox.get(orderItem.productId) ?? 0;
+        Product? product;
+
+        for (final apiProduct in products) {
+          if (apiProduct.id == orderItem.productId) {
+            product = apiProduct;
+            break;
+          }
+        }
+
+        if (product == null) {
+          unavailableCount++;
+          continue;
+        }
+
+        // Gunakan stok lokal yang sudah dikurangi saat checkout.
+        final availableStock = CartService.stockOf(product);
 
         if (availableStock <= 0) {
           unavailableCount++;
           continue;
         }
 
-        final existingItems = cartBox.values.where(
-          (item) =>
-              item.username == username &&
-              item.productId == orderItem.productId,
+        final beforeQty = CartService.itemsOf(SessionService.currentUser)
+            .where((cartItem) => cartItem.productId == product!.id)
+            .fold<int>(0, (total, cartItem) => total + cartItem.qty);
+
+        final wasLimited = await CartService.add(
+          SessionService.currentUser,
+          product,
+          orderItem.qty,
         );
 
-        if (existingItems.isNotEmpty) {
-          final existing = existingItems.first;
+        final afterQty = CartService.itemsOf(SessionService.currentUser)
+            .where((cartItem) => cartItem.productId == product!.id)
+            .fold<int>(0, (total, cartItem) => total + cartItem.qty);
 
-          final newQty = (existing.qty + orderItem.qty)
-              .clamp(0, availableStock)
-              .toInt();
-
-          if (newQty > existing.qty) {
-            existing
-              ..qty = newQty
-              ..stock = availableStock;
-
-            await existing.save();
-            addedCount++;
-          } else {
-            unavailableCount++;
-          }
+        if (afterQty > beforeQty) {
+          addedCount++;
         } else {
-          final qty = orderItem.qty.clamp(0, availableStock).toInt();
+          unavailableCount++;
+        }
 
-          if (qty > 0) {
-            await cartBox.add(
-              CartItem(
-                username: username,
-                productId: orderItem.productId,
-                title: orderItem.title,
-                price: orderItem.price,
-                image: orderItem.image,
-                qty: qty,
-                stock: availableStock,
-              ),
-            );
-            addedCount++;
-          } else {
-            unavailableCount++;
-          }
+        if (wasLimited) {
+          limitedCount++;
         }
       }
 
       if (!mounted) return;
 
-      String message;
-
-      if (addedCount > 0 && unavailableCount == 0) {
-        message = '$addedCount produk berhasil dimasukkan ke keranjang!';
-      } else if (addedCount > 0) {
-        message =
-            '$addedCount produk ditambahkan. $unavailableCount produk tidak tersedia atau stok penuh.';
+      if (addedCount == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Tidak ada produk yang bisa ditambahkan. '
+              'Stok mungkin sudah habis.',
+            ),
+            backgroundColor: Color(0xFFD9534F),
+          ),
+        );
       } else {
-        message = 'Tidak ada produk yang bisa ditambahkan. Periksa stok.';
-      }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '$addedCount produk berhasil dimasukkan ke keranjang. '
+              '${unavailableCount > 0 ? '$unavailableCount produk dilewati.' : ''}'
+              '${limitedCount > 0 ? ' Beberapa jumlah disesuaikan dengan stok.' : ''}',
+            ),
+            backgroundColor: const Color(0xFF6AB0AF),
+            duration: const Duration(seconds: 4),
+          ),
+        );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: const Color(0xFFE5738A),
-        ),
-      );
+        Navigator.pop(context);
+      }
     } catch (e) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal melakukan reorder: $e'),
+          content: Text('Gagal membeli ulang: $e'),
           backgroundColor: const Color(0xFFD9534F),
         ),
       );
     } finally {
       if (mounted) {
-        setState(() => isReordering = false);
+        setState(() {
+          isReordering = false;
+        });
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.items.isEmpty) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Detail Pesanan')),
-        body: const Center(child: Text('Data pesanan tidak ditemukan.')),
-      );
-    }
-
     final firstItem = widget.items.first;
 
     return Scaffold(
@@ -140,42 +156,38 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       appBar: AppBar(
         title: const Text('Detail Pesanan'),
         backgroundColor: const Color(0xFFF5A89A),
+        foregroundColor: const Color(0xFF4A2C2A),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(18),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
-                  children: [
-                    Icon(Icons.receipt_long_rounded, color: Color(0xFFE5738A)),
-                    SizedBox(width: 8),
-                    Text(
-                      'Informasi Pesanan',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF4A2C2A),
-                      ),
-                    ),
-                  ],
+                const Text(
+                  'Informasi Pesanan',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF4A2C2A),
+                  ),
                 ),
-                const SizedBox(height: 15),
-                infoRow('ID Pesanan', firstItem.orderId),
-                infoRow('Username', firstItem.username),
-                infoRow('Tanggal', formatDate(firstItem.createdAt)),
-                infoRow('Jenis produk', '${widget.items.length}'),
+                const SizedBox(height: 12),
+                Text('ID Pesanan: ${firstItem.orderId}'),
+                const SizedBox(height: 6),
+                Text('Tanggal: ${formatDate(firstItem.createdAt)}'),
+                const SizedBox(height: 6),
+                Text('Username: ${firstItem.username}'),
               ],
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
           const Text(
             'Produk yang Dibeli',
             style: TextStyle(
@@ -186,107 +198,93 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           ),
           const SizedBox(height: 10),
           ...widget.items.map((item) {
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Container(
-                      width: 75,
-                      height: 75,
-                      color: const Color(0xFFFBC9C0),
-                      child: item.image.isEmpty
-                          ? const Icon(Icons.image_not_supported)
-                          : Image.network(
-                              item.image,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return const Icon(Icons.image_not_supported);
-                              },
+            return Card(
+              color: Colors.white,
+              margin: const EdgeInsets.only(bottom: 10),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.network(
+                        item.image,
+                        width: 70,
+                        height: 70,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: 70,
+                            height: 70,
+                            color: const Color(0xFFFBC9C0),
+                            child: const Icon(Icons.image_not_supported),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF4A2C2A),
                             ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text('Qty: ${item.qty}'),
+                          Text('\$${item.price.toStringAsFixed(2)} / item'),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF4A2C2A),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '${item.qty} × \$${item.price.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF8D6460),
-                          ),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          '\$${(item.qty * item.price).toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFFE5738A),
-                          ),
-                        ),
-                      ],
+                    Text(
+                      '\$${(item.price * item.qty).toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        color: Color(0xFFE5738A),
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
           }),
           const SizedBox(height: 10),
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: const Color(0xFFFFF2A5),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Column(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                infoRow('Subtotal', '\$${orderTotal.toStringAsFixed(2)}'),
-                const Divider(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Total Pesanan',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: Color(0xFF4A2C2A),
-                      ),
-                    ),
-                    Text(
-                      '\$${orderTotal.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 19,
-                        color: Color(0xFFE5738A),
-                      ),
-                    ),
-                  ],
+                const Text(
+                  'Total Pesanan',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF4A2C2A),
+                  ),
+                ),
+                Text(
+                  '\$${orderTotal.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFE5738A),
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 22),
           SizedBox(
-            height: 52,
+            height: 50,
             child: ElevatedButton.icon(
               onPressed: isReordering ? null : reorderItems,
               icon: isReordering
@@ -298,8 +296,8 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                         color: Colors.white,
                       ),
                     )
-                  : const Icon(Icons.shopping_cart_checkout_rounded),
-              label: Text(isReordering ? 'Memproses...' : 'Beli Lagi'),
+                  : const Icon(Icons.refresh_rounded),
+              label: Text(isReordering ? 'Memeriksa stok...' : 'Beli Lagi'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFE5738A),
                 foregroundColor: Colors.white,
@@ -309,48 +307,8 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
               ),
             ),
           ),
-          const SizedBox(height: 20),
         ],
       ),
     );
-  }
-
-  Widget infoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 9),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(color: Color(0xFF8D6460), fontSize: 13),
-          ),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF4A2C2A),
-                fontSize: 13,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // createdAt disimpan sebagai timestamp dalam milidetik.
-  String formatDate(int timestamp) {
-    final date = DateTime.fromMillisecondsSinceEpoch(timestamp).toLocal();
-
-    final day = date.day.toString().padLeft(2, '0');
-    final month = date.month.toString().padLeft(2, '0');
-    final year = date.year;
-    final hour = date.hour.toString().padLeft(2, '0');
-    final minute = date.minute.toString().padLeft(2, '0');
-
-    return '$day/$month/$year $hour:$minute';
   }
 }
